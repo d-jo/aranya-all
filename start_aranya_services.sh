@@ -7,7 +7,7 @@ set -e
 
 # Display usage information
 usage() {
-    echo "Usage: $0 -p PORT -s SYNC_PORT"
+    echo "Usage: $0 -p PORT -s SYNC_PORT [OPTIONS]"
     echo "Start Aranya daemon and REST API services."
     echo
     echo "Required arguments:"
@@ -15,6 +15,9 @@ usage() {
     echo "  -s, --sync-port PORT Specify the Sync server port"
     echo
     echo "Optional arguments:"
+    echo "  -d, --debug          Enable debug mode (sets log level to debug)"
+    echo "  -t, --trace          Enable trace mode (sets log level to trace)"
+    echo "  -l, --log-level LEVEL Set specific log level (info, debug, trace, warn, error)"
     echo "  -h, --help           Display this help message and exit"
     exit 1
 }
@@ -22,6 +25,9 @@ usage() {
 # Parse command-line arguments
 REST_PORT=""
 SYNC_PORT=""
+# Default log level
+LOG_LEVEL="info"
+DEBUG_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -42,6 +48,24 @@ while [[ $# -gt 0 ]]; do
                 usage
             fi
             SYNC_PORT="$2"
+            shift 2
+            ;;
+        -d|--debug)
+            DEBUG_MODE=true
+            LOG_LEVEL="debug"
+            shift
+            ;;
+        -t|--trace)
+            DEBUG_MODE=true
+            LOG_LEVEL="trace"
+            shift
+            ;;
+        -l|--log-level)
+            if [[ -z "$2" || "$2" =~ ^- ]]; then
+                echo "Error: --log-level requires a value"
+                usage
+            fi
+            LOG_LEVEL="$2"
             shift 2
             ;;
         *)
@@ -85,6 +109,18 @@ PORT=$REST_PORT
 NAME="aranya-daemon-$RUN_ID"  # Make daemon name unique
 DAEMON_LOG="$BASE_DIR/daemon.log"
 REST_API_LOG="$BASE_DIR/rest-api.log"
+
+# Set environment variables for logging
+export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
+export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL}"
+export ARANYA_DAEMON="${LOG_LEVEL}"
+
+if [ "$DEBUG_MODE" = true ]; then
+    echo "Debug mode enabled. Log level: ${LOG_LEVEL}"
+    echo "ARANYA_LOG_LEVEL=${ARANYA_LOG_LEVEL}"
+    echo "ARANYA_DAEMON=${ARANYA_DAEMON}"
+    echo "RUST_LOG=${RUST_LOG}"
+fi
 
 # Function to clean up processes and files on exit
 cleanup() {
@@ -156,7 +192,7 @@ cd "$ARANYA_DIR"
 
 # Start the daemon in foreground mode, but save its PID
 echo "Starting the daemon..."
-cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$DAEMON_LOG" 2>&1 &
+ARANYA_LOG_LEVEL="$LOG_LEVEL" ARANYA_DAEMON="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$DAEMON_LOG" 2>&1 &
 DAEMON_PID=$!
 echo "Daemon started with PID $DAEMON_PID (logs at $DAEMON_LOG)"
 
@@ -178,10 +214,14 @@ export ARANYA_DAEMON_SOCK_PATH="$DAEMON_SOCK_PATH"
 export ARANYA_AFC_SHM_PATH="$AFC_SHM_PATH"
 export ARANYA_MAX_AFC_CHANNELS="$MAX_AFC_CHANNELS"
 export ARANYA_AFC_LISTEN_ADDRESS="$AFC_LISTEN_ADDRESS"
+# Keep log level settings 
+export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
+export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL}"
+export ARANYA_DAEMON="${LOG_LEVEL}"
 
 # Start the REST API in foreground mode, but save its PID
 echo "Starting the REST API..."
-cargo run --bin aranya-rest-api > "$REST_API_LOG" 2>&1 &
+ARANYA_LOG_LEVEL="$LOG_LEVEL" ARANYA_DAEMON="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-rest-api > "$REST_API_LOG" 2>&1 &
 REST_API_PID=$!
 echo "REST API started with PID $REST_API_PID (logs at $REST_API_LOG)"
 
@@ -193,6 +233,7 @@ echo
 echo "All Aranya services started!"
 echo
 echo "Instance ID: $RUN_ID"
+echo "Log level: $LOG_LEVEL"
 echo "REST API is available at http://$BIND_ADDRESS:$REST_PORT/api/v1"
 echo
 echo "Web UI can connect using the following settings:"

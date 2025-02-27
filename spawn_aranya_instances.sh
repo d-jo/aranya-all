@@ -65,10 +65,13 @@ done
 export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
 # Also set RUST_LOG for backwards compatibility with other components
 export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL}"
+# Set specific variable for aranya-daemon (which uses ARANYA_DAEMON env var)
+export ARANYA_DAEMON="${LOG_LEVEL}"
 
 if [ "$DEBUG_MODE" = true ]; then
     echo "Debug mode enabled. Log level: ${LOG_LEVEL}"
     echo "ARANYA_LOG_LEVEL=${ARANYA_LOG_LEVEL}"
+    echo "ARANYA_DAEMON=${ARANYA_DAEMON}"
     echo "RUST_LOG=${RUST_LOG}"
 fi
 
@@ -225,7 +228,7 @@ for i in $(seq 1 $NUM_INSTANCES); do
     CONFIG_FILE=$(cat "$INSTANCE_DIR/config_path.txt")
     
     # Start the daemon in background
-    (cd "$ARANYA_DIR" && ARANYA_LOG_LEVEL="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$INSTANCE_DIR/daemon.log" 2>&1) &
+    (cd "$ARANYA_DIR" && ARANYA_LOG_LEVEL="$LOG_LEVEL" ARANYA_DAEMON="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$INSTANCE_DIR/daemon.log" 2>&1) &
     DAEMON_PID=$!
     DAEMON_PIDS[$i]=$DAEMON_PID
     echo $DAEMON_PID > "$INSTANCE_DIR/daemon.pid"
@@ -334,6 +337,7 @@ echo "All instances are running. Instances will be terminated when you press Ctr
 echo "Logs are stored in $TEMP_DIR if you need to investigate issues."
 echo "Log level: $LOG_LEVEL"
 echo "ARANYA_LOG_LEVEL=$ARANYA_LOG_LEVEL"
+echo "ARANYA_DAEMON=$ARANYA_DAEMON"
 echo "RUST_LOG=$RUST_LOG"
 
 # Keep the script running until Ctrl+C

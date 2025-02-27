@@ -72,10 +72,13 @@ REST_API_BIND_ADDRESS="127.0.0.1"
 export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
 # Also set RUST_LOG for backwards compatibility with other components
 export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL}"
+# Set specific variable for aranya-daemon (which uses ARANYA_DAEMON env var)
+export ARANYA_DAEMON="${LOG_LEVEL}"
 
 if [ "$DEBUG_MODE" = true ]; then
     echo "Debug mode enabled. Log level: ${LOG_LEVEL}"
     echo "ARANYA_LOG_LEVEL=${ARANYA_LOG_LEVEL}"
+    echo "ARANYA_DAEMON=${ARANYA_DAEMON}"
     echo "RUST_LOG=${RUST_LOG}"
 fi
 
@@ -114,7 +117,7 @@ echo "Starting Aranya daemon from $ARANYA_DIR..."
 cd "$ARANYA_DIR"
 
 # Start the daemon
-cargo run --bin aranya-daemon -- "$CONFIG_FILE" &
+ARANYA_DAEMON="${LOG_LEVEL}" cargo run --bin aranya-daemon -- "$CONFIG_FILE" &
 DAEMON_PID=$!
 
 echo "Aranya daemon started with PID: $DAEMON_PID"
@@ -152,6 +155,7 @@ fi
 echo
 echo "To manually start the REST API, you can use the following environment variables:"
 echo "  ARANYA_LOG_LEVEL=${LOG_LEVEL}"
+echo "  ARANYA_DAEMON=${LOG_LEVEL}"
 echo "  RUST_LOG=${RUST_LOG}"
 echo "  ARANYA_DAEMON_SOCK_PATH=$DAEMON_SOCK_PATH"
 echo "  ARANYA_AFC_SHM_PATH=$AFC_SHM_PATH"

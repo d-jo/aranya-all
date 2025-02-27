@@ -11,6 +11,10 @@ NC='\033[0m' # No Color
 WEB_UI_PORT=8080
 API_PORT=8000
 
+# Default log level
+LOG_LEVEL="info"
+DEBUG_MODE=false
+
 # Process command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -22,12 +26,33 @@ while [[ $# -gt 0 ]]; do
             API_PORT="$2"
             shift 2
             ;;
+        -d|--debug)
+            DEBUG_MODE=true
+            LOG_LEVEL="debug"
+            shift
+            ;;
+        -t|--trace)
+            DEBUG_MODE=true
+            LOG_LEVEL="trace"
+            shift
+            ;;
+        -l|--log-level)
+            if [[ -z "$2" || "$2" =~ ^- ]]; then
+                echo -e "${RED}Error: --log-level requires a value${NC}"
+                exit 1
+            fi
+            LOG_LEVEL="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  --port PORT      Specify the port for the Web UI (default: 8080)"
             echo "  --api-port PORT  Specify the port for the REST API (default: 8000)"
+            echo "  -d, --debug      Enable debug mode (sets log level to debug)"
+            echo "  -t, --trace      Enable trace mode (sets log level to trace)"
+            echo "  -l, --log-level LEVEL  Set specific log level (info, debug, trace, warn, error)"
             echo "  -h, --help       Show this help message"
             exit 0
             ;;
@@ -39,8 +64,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Set environment variables for logging based on options
+export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
+export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL},aranya_web_ui=${LOG_LEVEL}"
+export ARANYA_DAEMON="${LOG_LEVEL}"
+
+if [ "$DEBUG_MODE" = true ]; then
+    echo -e "${GREEN}Debug mode enabled. Log level: ${LOG_LEVEL}${NC}"
+    echo -e "${GREEN}ARANYA_LOG_LEVEL=${ARANYA_LOG_LEVEL}${NC}"
+    echo -e "${GREEN}ARANYA_DAEMON=${ARANYA_DAEMON}${NC}"
+    echo -e "${GREEN}RUST_LOG=${RUST_LOG}${NC}"
+fi
+
 echo -e "${GREEN}Starting Aranya Web UI on port ${WEB_UI_PORT}...${NC}"
 echo -e "${GREEN}Will connect to API on port ${API_PORT}...${NC}"
+echo -e "${GREEN}Log level: ${LOG_LEVEL}${NC}"
 
 # Determine the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -71,6 +109,9 @@ WEB_UI_DIR="$SCRIPT_DIR/aranya/crates/aranya-web-ui"
 # Set environment variables
 export ARANYA_WEB_UI_PORT=$WEB_UI_PORT
 export ARANYA_API_PORT=$API_PORT
+export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
+export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL},aranya_web_ui=${LOG_LEVEL}"
+export ARANYA_DAEMON="${LOG_LEVEL}"
 
 # Create correct symlink for templates directory
 if [ -e "templates" ]; then
@@ -86,6 +127,6 @@ fi
 ln -sf "$WEB_UI_DIR/templates" templates
 
 # Run from the base aranya directory
-cargo run --bin aranya-web-ui
+ARANYA_LOG_LEVEL="$LOG_LEVEL" ARANYA_DAEMON="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-web-ui
 
 echo -e "${GREEN}Aranya Web UI has been stopped.${NC}" 
