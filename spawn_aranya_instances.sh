@@ -8,6 +8,9 @@ set -e
 NUM_INSTANCES=10
 BASE_REST_PORT=8800
 BASE_SYNC_PORT=9900
+# Default log level
+LOG_LEVEL="info"
+DEBUG_MODE=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -20,12 +23,33 @@ while [[ $# -gt 0 ]]; do
             NUM_INSTANCES="$2"
             shift 2
             ;;
+        -d|--debug)
+            DEBUG_MODE=true
+            LOG_LEVEL="debug"
+            shift
+            ;;
+        -t|--trace)
+            DEBUG_MODE=true
+            LOG_LEVEL="trace"
+            shift
+            ;;
+        -l|--log-level)
+            if [[ -z "$2" || "$2" =~ ^- ]]; then
+                echo "Error: --log-level requires a value"
+                exit 1
+            fi
+            LOG_LEVEL="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo "Spawn multiple Aranya instances and query their device IDs."
             echo
             echo "Options:"
             echo "  -n, --num-instances N    Number of instances to spawn (default: 10)"
+            echo "  -d, --debug              Enable debug mode (sets log level to debug)"
+            echo "  -t, --trace              Enable trace mode (sets log level to trace)" 
+            echo "  -l, --log-level LEVEL    Set specific log level (info, debug, trace, warn, error)"
             echo "  -h, --help               Display this help message and exit"
             exit 0
             ;;
@@ -36,6 +60,17 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Set environment variables for logging based on options
+export ARANYA_LOG_LEVEL="${LOG_LEVEL}"
+# Also set RUST_LOG for backwards compatibility with other components
+export RUST_LOG="${LOG_LEVEL},aranya_rest_api=${LOG_LEVEL},aranya_daemon=${LOG_LEVEL}"
+
+if [ "$DEBUG_MODE" = true ]; then
+    echo "Debug mode enabled. Log level: ${LOG_LEVEL}"
+    echo "ARANYA_LOG_LEVEL=${ARANYA_LOG_LEVEL}"
+    echo "RUST_LOG=${RUST_LOG}"
+fi
 
 # Project directory
 ARANYA_DIR="$(pwd)/aranya"
@@ -190,7 +225,7 @@ for i in $(seq 1 $NUM_INSTANCES); do
     CONFIG_FILE=$(cat "$INSTANCE_DIR/config_path.txt")
     
     # Start the daemon in background
-    (cd "$ARANYA_DIR" && cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$INSTANCE_DIR/daemon.log" 2>&1) &
+    (cd "$ARANYA_DIR" && ARANYA_LOG_LEVEL="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$INSTANCE_DIR/daemon.log" 2>&1) &
     DAEMON_PID=$!
     DAEMON_PIDS[$i]=$DAEMON_PID
     echo $DAEMON_PID > "$INSTANCE_DIR/daemon.pid"
@@ -212,12 +247,15 @@ for i in $(seq 1 $NUM_INSTANCES); do
     # Set environment variables for the REST API
     (
         cd "$ARANYA_DIR" 
+        ARANYA_LOG_LEVEL="$LOG_LEVEL" \
+        RUST_LOG="$RUST_LOG" \
         ARANYA_REST_BIND_ADDRESS="127.0.0.1" \
         ARANYA_REST_PORT="$REST_PORT" \
         ARANYA_DAEMON_SOCK_PATH="$DAEMON_SOCK_PATH" \
         ARANYA_AFC_SHM_PATH="$AFC_SHM_PATH" \
         ARANYA_MAX_AFC_CHANNELS="1024" \
         ARANYA_AFC_LISTEN_ADDRESS="127.0.0.1:0" \
+        ARANYA_SKIP_TRACING_INIT="true" \
         cargo run --bin aranya-rest-api > "$INSTANCE_DIR/rest.log" 2>&1
     ) &
     REST_PID=$!
@@ -294,6 +332,9 @@ done
 echo "----------------------------------------"
 echo "All instances are running. Instances will be terminated when you press Ctrl+C."
 echo "Logs are stored in $TEMP_DIR if you need to investigate issues."
+echo "Log level: $LOG_LEVEL"
+echo "ARANYA_LOG_LEVEL=$ARANYA_LOG_LEVEL"
+echo "RUST_LOG=$RUST_LOG"
 
 # Keep the script running until Ctrl+C
 while true; do
