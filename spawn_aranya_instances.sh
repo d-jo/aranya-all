@@ -184,6 +184,8 @@ for i in $(seq 1 $NUM_INSTANCES); do
     INSTANCE_DIRS[$i]=$INSTANCE_DIR
     mkdir -p "$INSTANCE_DIR"
     mkdir -p "$INSTANCE_DIR/work"
+    # Make sure work directory has proper permissions
+    chmod 755 "$INSTANCE_DIR/work"
     
     # Save port information for later use
     echo "REST_PORT=$REST_PORT" > "$INSTANCE_DIR/ports.txt"
@@ -196,7 +198,32 @@ for i in $(seq 1 $NUM_INSTANCES); do
     PID_FILE="$INSTANCE_DIR/daemon.pid"
     CONFIG_FILE="$INSTANCE_DIR/config.json"
     
-    cat > "$CONFIG_FILE" << EOL
+    # Create JSON config using jq if available to ensure proper JSON format
+    if command -v jq &> /dev/null; then
+        jq -n \
+            --arg name "$RUN_ID" \
+            --arg work_dir "$INSTANCE_DIR/work" \
+            --arg uds_api_path "$DAEMON_SOCK_PATH" \
+            --arg pid_file "$PID_FILE" \
+            --arg sync_addr "127.0.0.1:$SYNC_PORT" \
+            --arg shm_path "$AFC_SHM_PATH" \
+            '{
+                name: $name,
+                work_dir: $work_dir,
+                uds_api_path: $uds_api_path,
+                pid_file: $pid_file,
+                sync_addr: $sync_addr,
+                afc: {
+                    shm_path: $shm_path,
+                    unlink_on_startup: true,
+                    unlink_at_exit: true,
+                    create: true,
+                    max_chans: 1024
+                }
+            }' > "$CONFIG_FILE"
+    else
+        # Fallback to cat if jq is not available, but ensure correct escaping
+        cat > "$CONFIG_FILE" << EOL
 {
     "name": "$RUN_ID",
     "work_dir": "$INSTANCE_DIR/work",
@@ -212,6 +239,16 @@ for i in $(seq 1 $NUM_INSTANCES); do
     }
 }
 EOL
+    fi
+    
+    # Verify the configuration file is valid JSON
+    if command -v jq &> /dev/null; then
+        if ! jq . "$CONFIG_FILE" > /dev/null 2>&1; then
+            echo "Error: Invalid JSON configuration for instance $i"
+            cat "$CONFIG_FILE"
+            exit 1
+        fi
+    fi
     
     # Save paths for later use
     echo "$AFC_SHM_PATH" > "$INSTANCE_DIR/afc_path.txt"
@@ -226,6 +263,14 @@ echo "Starting all daemon instances..."
 for i in $(seq 1 $NUM_INSTANCES); do
     INSTANCE_DIR="${INSTANCE_DIRS[$i]}"
     CONFIG_FILE=$(cat "$INSTANCE_DIR/config_path.txt")
+    
+    # Verify work directory exists before starting daemon
+    WORK_DIR="$INSTANCE_DIR/work"
+    if [ ! -d "$WORK_DIR" ]; then
+        echo "Creating missing work directory: $WORK_DIR"
+        mkdir -p "$WORK_DIR"
+        chmod 755 "$WORK_DIR"
+    fi
     
     # Start the daemon in background
     (cd "$ARANYA_DIR" && ARANYA_LOG_LEVEL="$LOG_LEVEL" ARANYA_DAEMON="$LOG_LEVEL" RUST_LOG="$RUST_LOG" cargo run --bin aranya-daemon -- "$CONFIG_FILE" > "$INSTANCE_DIR/daemon.log" 2>&1) &
@@ -246,6 +291,13 @@ for i in $(seq 1 $NUM_INSTANCES); do
     REST_PORT="${REST_PORTS[$i]}"
     DAEMON_SOCK_PATH=$(cat "$INSTANCE_DIR/sock_path.txt")
     AFC_SHM_PATH=$(cat "$INSTANCE_DIR/afc_path.txt")
+    
+    # Verify daemon socket exists
+    if [ ! -S "$DAEMON_SOCK_PATH" ]; then
+        echo "Warning: Daemon socket not found at $DAEMON_SOCK_PATH for instance $i"
+        echo "Checking daemon logs:"
+        tail -n 10 "$INSTANCE_DIR/daemon.log"
+    fi
     
     # Set environment variables for the REST API
     (
@@ -339,6 +391,28 @@ echo "Log level: $LOG_LEVEL"
 echo "ARANYA_LOG_LEVEL=$ARANYA_LOG_LEVEL"
 echo "ARANYA_DAEMON=$ARANYA_DAEMON"
 echo "RUST_LOG=$RUST_LOG"
+
+# Print instance information for debugging purposes
+echo "----------------------------------------"
+echo "Instance directories:"
+for i in $(seq 1 $NUM_INSTANCES); do
+    INSTANCE_DIR="${INSTANCE_DIRS[$i]}"
+    CONFIG_FILE=$(cat "$INSTANCE_DIR/config_path.txt")
+    WORK_DIR="$INSTANCE_DIR/work"
+    echo "Instance $i:"
+    echo "  Work Directory: $WORK_DIR ($(ls -ld "$WORK_DIR" 2>/dev/null || echo "NOT FOUND"))"
+    echo "  Config File: $CONFIG_FILE"
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "  Config Contents:" 
+        cat "$CONFIG_FILE" | sed 's/^/    /'
+    else
+        echo "  Config missing!"
+    fi
+    echo "  Daemon Log: $INSTANCE_DIR/daemon.log"
+    echo "  REST Log: $INSTANCE_DIR/rest.log"
+    echo ""
+done
+echo "----------------------------------------"
 
 # Keep the script running until Ctrl+C
 while true; do
