@@ -1,0 +1,50 @@
+[
+  {
+    "id": "default",
+    "name": "Default Local API",
+    "url": "http://127.0.0.1:8000",
+    "isDefault": true
+  },
+  {
+    "id": "api_1740717998096",
+    "name": "Alice",
+    "url": "http://127.0.0.1:8801",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:46:38.096Z"
+  },
+  {
+    "id": "api_1740718008162",
+    "name": "Bob",
+    "url": "http://127.0.0.1:8802",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:46:48.162Z"
+  },
+  {
+    "id": "api_1740718061762",
+    "name": "Charlie",
+    "url": "http://127.0.0.1:8803",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:47:41.762Z"
+  },
+  {
+    "id": "api_1740718070162",
+    "name": "Dave",
+    "url": "http://127.0.0.1:8804",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:47:50.162Z"
+  },
+  {
+    "id": "api_1740718091546",
+    "name": "Elizabeth",
+    "url": "http://127.0.0.1:8805",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:48:11.546Z"
+  },
+  {
+    "id": "api_1740718112995",
+    "name": "Frankie",
+    "url": "http://127.0.0.1:8806",
+    "isDefault": false,
+    "dateAdded": "2025-02-28T04:48:32.995Z"
+  }
+]
