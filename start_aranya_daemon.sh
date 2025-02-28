@@ -117,7 +117,7 @@ echo "Starting Aranya daemon from $ARANYA_DIR..."
 cd "$ARANYA_DIR"
 
 # Start the daemon
-ARANYA_DAEMON="${LOG_LEVEL}" cargo run --bin aranya-daemon -- "$CONFIG_FILE" &
+ARANYA_DAEMON="${LOG_LEVEL}" cargo run --bin aranya-daemon -- "$CONFIG_FILE" >  &
 DAEMON_PID=$!
 
 echo "Aranya daemon started with PID: $DAEMON_PID"
